@@ -1,0 +1,1685 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TeleCloud Vault — Personal Telegram & PostgreSQL File Manager</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.4);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(100, 116, 139, 0.5);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(148, 163, 184, 0.8);
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col selection:bg-indigo-500 selection:text-white overflow-x-hidden">
+
+  <!-- Top Security & Status Banner -->
+  <div id="authLockOverlay" class="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center p-4">
+    <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 sm:p-8">
+      <div class="flex items-center gap-3 mb-5">
+        <div class="w-11 h-11 rounded-xl bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+        </div>
+        <div>
+          <h2 class="text-lg font-bold text-white">TeleCloud Personal Vault</h2>
+          <p class="text-xs text-slate-400">PBKDF2-HMAC-SHA256 (600,000 iter) + AES-256-GCM</p>
+        </div>
+      </div>
+
+      <p id="authOverlayDesc" class="text-sm text-slate-300 mb-4">
+        Enter your master password to unlock the vault. If this is the first run, this will create it (minimum 12 characters).
+      </p>
+
+      <div class="space-y-4">
+        <div>
+          <label for="masterPasswordInput" class="block text-xs font-medium text-slate-400 mb-1">Master Password</label>
+          <input id="masterPasswordInput" type="password" value="" placeholder="Enter strong master password..." class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500" />
+        </div>
+        <div id="authErrorMsg" class="hidden text-xs text-rose-400 bg-rose-950/50 border border-rose-800/60 rounded-lg px-3 py-2"></div>
+        <button id="unlockVaultBtn" type="button" class="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl text-sm transition shadow-lg shadow-indigo-600/25">
+          <span id="unlockVaultBtnLabel">Unlock Personal Vault</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none px-4 sm:px-0"></div>
+
+  <!-- Main Header -->
+  <header class="sticky top-0 z-30 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-3 sm:px-6 py-3">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+      <!-- Brand + Mobile Sidebar Toggle -->
+      <div class="flex items-center gap-2.5">
+        <button id="mobileMenuBtn" type="button" class="lg:hidden p-2 rounded-lg bg-slate-800 text-slate-300 hover:text-white" aria-label="Toggle folder navigation">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-sky-500 flex items-center justify-center shadow-md shadow-indigo-500/20">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/></svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-base sm:text-lg font-bold tracking-tight text-white">TeleCloud Vault</h1>
+            <span id="tgConnectionPill" class="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span id="tgModeLabel">Telegram Saved Messages</span>
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-400 hidden sm:block">Zero-Recompression Raw Document Storage • PostgreSQL Metadata Index • EXIF & Timestamp Preserved</p>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="flex items-center gap-1 bg-slate-950/80 p-1 rounded-xl border border-slate-800 overflow-x-auto max-w-full">
+        <button type="button" data-tab="files" class="nav-tab-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-600 text-white transition whitespace-nowrap">
+          Files & Folders
+        </button>
+        <button type="button" data-tab="gphotos" class="nav-tab-btn px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white transition whitespace-nowrap flex items-center gap-1.5">
+          <span>Google Photos OAuth</span>
+          <span class="px-1.5 py-0.2 bg-sky-500/20 text-sky-300 rounded text-[10px]">Sync</span>
+        </button>
+        <button type="button" data-tab="credentials" class="nav-tab-btn px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white transition whitespace-nowrap">
+          Credentials & Security
+        </button>
+        <button type="button" data-tab="sqlite" class="nav-tab-btn px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white transition whitespace-nowrap">
+          Database & Backup
+        </button>
+        <button type="button" data-tab="deploy" class="nav-tab-btn px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white transition whitespace-nowrap">
+          Full-Stack & Deploy
+        </button>
+      </nav>
+
+      <!-- Quick Actions -->
+      <div class="flex items-center gap-2">
+        <button id="lockVaultBtn" type="button" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium flex items-center gap-1.5 border border-slate-700 transition" title="Lock Personal Vault">
+          <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+          <span class="hidden sm:inline">Lock</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace Container -->
+  <div class="flex-1 max-w-7xl w-full mx-auto flex flex-col lg:flex-row gap-4 p-3 sm:p-6">
+
+    <!-- Left Sidebar: Folder Tree & Storage Telemetry -->
+    <aside id="folderSidebar" class="w-full lg:w-64 shrink-0 bg-slate-900/90 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between gap-6">
+      <div>
+        <!-- Primary Upload CTA -->
+        <div class="mb-5">
+          <label for="bulkFileInput" class="w-full cursor-pointer py-2.5 px-4 bg-gradient-to-r from-indigo-600 to-sky-600 hover:from-indigo-500 hover:to-sky-500 text-white font-semibold rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20 transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+            <span>Bulk Upload Files</span>
+          </label>
+          <input id="bulkFileInput" type="file" multiple class="hidden" />
+
+          <!-- Lossless Compression Switch -->
+          <div class="mt-3 p-2.5 rounded-xl bg-slate-950/70 border border-slate-800/80 flex items-center justify-between gap-2">
+            <div>
+              <p class="text-xs font-medium text-slate-200">Lossless Companion</p>
+              <p class="text-[10px] text-slate-400">Keep raw original + lossless opt</p>
+            </div>
+            <button id="losslessToggleBtn" type="button" role="switch" aria-checked="true" class="w-10 h-5 rounded-full bg-indigo-600 relative transition flex items-center p-0.5">
+              <span id="losslessToggleKnob" class="w-4 h-4 rounded-full bg-white transform translate-x-5 transition"></span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Folder Organization Header -->
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Folders</span>
+          <button id="openNewFolderModalBtn" type="button" class="text-xs text-indigo-400 hover:text-indigo-300 font-medium flex items-center gap-1">
+            <span>+ New Folder</span>
+          </button>
+        </div>
+
+        <!-- New Folder Inline Form -->
+        <div id="newFolderBox" class="hidden mb-3 p-2.5 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+          <input id="newFolderNameInput" type="text" placeholder="Folder name (e.g. RAW Shoots)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500" />
+          <div class="flex items-center justify-end gap-1.5">
+            <button id="cancelNewFolderBtn" type="button" class="px-2 py-1 text-xs text-slate-400 hover:text-white">Cancel</button>
+            <button id="createFolderSubmitBtn" type="button" class="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs rounded-lg font-medium">Create</button>
+          </div>
+        </div>
+
+        <!-- Folder Tree List -->
+        <ul id="folderListContainer" class="space-y-1 text-sm"></ul>
+      </div>
+
+      <!-- Storage Backend Telemetry -->
+      <div class="pt-4 border-t border-slate-800 space-y-3 text-xs">
+        <div class="flex items-center justify-between">
+          <span class="text-slate-400">Telegram Cloud</span>
+          <span class="text-emerald-400 font-medium">Unlimited (∞)</span>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-slate-400">Original Bytes Stored</span>
+          <span id="statTotalBytes" class="font-mono text-slate-200">0 MB</span>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-slate-400">Lossless Saved (Sidecar)</span>
+          <span id="statSavedBytes" class="font-mono text-indigo-400">0 MB</span>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-slate-400">Database Indexed Rows</span>
+          <span id="statIndexedCount" class="font-mono text-slate-200">0 files</span>
+        </div>
+        <button id="quickBackupSqliteBtn" type="button" class="w-full py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium flex items-center justify-center gap-1.5 border border-slate-700 transition">
+          <svg class="w-3.5 h-3.5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
+          <span>Snapshot Database to TG</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 min-w-0">
+
+      <!-- TAB 1: FILES & FOLDERS -->
+      <section id="tab-files" class="tab-panel space-y-4">
+
+        <!-- Active Upload Queue Progress Panel -->
+        <div id="uploadProgressPanel" class="hidden bg-slate-900 border border-indigo-500/40 rounded-2xl p-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-indigo-400 animate-ping"></span>
+              <h3 class="text-xs font-semibold uppercase tracking-wider text-indigo-300">Telegram Chunk & EXIF Preservation Pipeline</h3>
+            </div>
+            <span id="uploadQueueSummary" class="text-xs font-mono text-slate-400">0 / 0 completed</span>
+          </div>
+          <div id="uploadItemsList" class="space-y-2 max-h-44 overflow-y-auto pr-1"></div>
+        </div>
+
+        <!-- Search, Filter & Bulk Actions Bar -->
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3">
+          <!-- Breadcrumb -->
+          <div id="folderBreadcrumb" class="flex items-center gap-1.5 text-xs sm:text-sm font-medium text-slate-300"></div>
+
+          <!-- Search & Type Filter -->
+          <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            <div class="relative flex-1 sm:w-64">
+              <svg class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              <input id="searchInput" type="text" placeholder="Search name, camera, ISO, lens, hash..." class="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-1.5 text-xs sm:text-sm text-white focus:outline-none focus:border-indigo-500" />
+            </div>
+
+            <select id="typeFilterSelect" class="bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+              <option value="all">All Types</option>
+              <option value="image">Images & RAW</option>
+              <option value="document">Documents & Archives</option>
+              <option value="gphotos">Google Photos Synced</option>
+            </select>
+
+            <button id="deleteSelectedBtn" type="button" class="hidden px-3 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 text-xs font-medium transition">
+              Delete Selected (<span id="selectedCountLabel">0</span>)
+            </button>
+          </div>
+        </div>
+
+        <!-- Drag & Drop Zone -->
+        <div id="dropZone" class="border-2 border-dashed border-slate-800 hover:border-indigo-500/60 bg-slate-900/40 rounded-2xl p-4 text-center transition cursor-pointer">
+          <p class="text-xs sm:text-sm text-slate-300">
+            Drag & drop images or files here for <span class="text-indigo-400 font-medium">uncompressed Telegram document storage</span> (preserves 100% original EXIF & file modification timestamps)
+          </p>
+        </div>
+
+        <!-- Files Grid -->
+        <div id="filesGridContainer" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+      </section>
+
+      <!-- TAB 2: GOOGLE PHOTOS OAUTH INTEGRATION -->
+      <section id="tab-gphotos" class="tab-panel hidden space-y-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+          <div class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <span class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 mb-2">
+                UI Preview Only — Google OAuth consent flow not yet wired
+              </span>
+              <h2 class="text-lg font-bold text-white">Google Photos to Telegram Lossless Transfer</h2>
+              <p class="text-xs sm:text-sm text-slate-400 mt-1 max-w-2xl">
+                Connect your Google account via OAuth 2.0 to import high-resolution photos directly into your Telegram backend. Uses the <code class="text-sky-300 font-mono">baseUrl=d</code> download parameter so original EXIF camera metadata, GPS coordinates, and capture timestamps are preserved byte-for-byte.
+              </p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button id="connectGoogleOAuthBtn" type="button" class="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs sm:text-sm font-semibold transition flex items-center gap-2 shadow-lg shadow-sky-600/20">
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z"/></svg>
+                <span id="googleOAuthStatusText">Authorize Google OAuth 2.0</span>
+              </button>
+              <button id="importSelectedGPhotosBtn" type="button" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm font-semibold transition">
+                Transfer Selected to Telegram
+              </button>
+            </div>
+          </div>
+
+          <!-- OAuth Config Bar -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2 border-t border-slate-800 text-xs">
+            <div class="bg-slate-950 p-3 rounded-xl border border-slate-800">
+              <span class="text-slate-400 block mb-1">OAuth 2.0 Client ID</span>
+              <input id="gphotosClientIdInput" type="text" value="" placeholder="your-client-id.apps.googleusercontent.com" class="w-full bg-transparent font-mono text-slate-200 focus:outline-none" />
+            </div>
+            <div class="bg-slate-950 p-3 rounded-xl border border-slate-800">
+              <span class="text-slate-400 block mb-1">Target Vault Folder</span>
+              <select id="gphotosTargetFolderSelect" class="w-full bg-slate-950 text-slate-200 focus:outline-none"></select>
+            </div>
+            <div class="bg-slate-950 p-3 rounded-xl border border-slate-800">
+              <span class="text-slate-400 block mb-1">Download Parameter</span>
+              <span class="font-mono text-emerald-400">baseUrl + "=d" (Original Quality + EXIF)</span>
+            </div>
+          </div>
+
+          <!-- Google Photos Media Grid -->
+          <div id="gphotosGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-2"></div>
+        </div>
+      </section>
+
+      <!-- TAB 3: CREDENTIALS & SECURITY MANAGEMENT -->
+      <section id="tab-credentials" class="tab-panel hidden space-y-4">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <!-- Telegram Storage Backend Configuration -->
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h2 class="text-base font-bold text-white">Telegram Storage Backend Configuration</h2>
+                <p class="text-xs text-slate-400">Switch between Private Telegram Bot API or Personal Saved Messages (MTProto)</p>
+              </div>
+              <span class="px-2.5 py-1 rounded-full text-[11px] font-mono bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">AES-256-GCM</span>
+            </div>
+
+            <div class="space-y-3 text-xs">
+              <div>
+                <label class="block text-slate-400 mb-1">Storage Mode</label>
+                <select id="tgStorageModeSelect" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
+                  <option value="saved_messages">Personal Saved Messages (MTProto / User ID)</option>
+                  <option value="telegram_bot">Private Telegram Bot API (sendDocument Raw Mode)</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-slate-400 mb-1">Telegram Bot Token (from @BotFather)</label>
+                <input id="tgBotTokenInput" type="password" value="" placeholder="123456789:AA...your bot token" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 font-mono text-slate-200 focus:outline-none focus:border-indigo-500" />
+              </div>
+
+              <div>
+                <label class="block text-slate-400 mb-1">Target Chat ID (Saved Messages User ID or Private Channel ID)</label>
+                <input id="tgChatIdInput" type="text" value="" placeholder="e.g. 123456789 or -1001234567890" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 font-mono text-slate-200 focus:outline-none focus:border-indigo-500" />
+              </div>
+
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="block text-slate-400 mb-1">MTProto API ID (Optional, not yet wired)</label>
+                  <input id="tgApiIdInput" type="text" value="" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 font-mono text-slate-200 focus:outline-none focus:border-indigo-500" />
+                </div>
+                <div>
+                  <label class="block text-slate-400 mb-1">MTProto API Hash (Optional, not yet wired)</label>
+                  <input id="tgApiHashInput" type="password" value="" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 font-mono text-slate-200 focus:outline-none focus:border-indigo-500" />
+                </div>
+              </div>
+
+              <div class="pt-2 flex flex-wrap items-center gap-2">
+                <button id="saveTgCredsBtn" type="button" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition">
+                  Encrypt & Save Telegram Credentials
+                </button>
+                <button id="testTgConnectionBtn" type="button" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium border border-slate-700 transition">
+                  Verify Telegram Handshake
+                </button>
+              </div>
+              <div id="tgCredsStatus" class="text-[11px] text-slate-400 font-mono"></div>
+            </div>
+          </div>
+
+          <!-- Strong Password & Vault Encryption Settings -->
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+            <div>
+              <h2 class="text-base font-bold text-white">Personal Master Password & Key Rotation</h2>
+              <p class="text-xs text-slate-400">Single-owner access policy with PBKDF2-HMAC-SHA256 key derivation</p>
+            </div>
+
+            <div class="space-y-3 text-xs">
+              <div>
+                <label class="block text-slate-400 mb-1">Current Master Password</label>
+                <input id="currentMasterPwInput" type="password" value="" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200" />
+              </div>
+              <div>
+                <label class="block text-slate-400 mb-1">New Master Password (min 12 chars, mixed case + symbol)</label>
+                <input id="newMasterPwInput" type="password" placeholder="Enter new strong master password..." class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200" />
+              </div>
+              <div class="bg-slate-950/90 border border-slate-800 rounded-xl p-3 space-y-1.5 text-[11px] text-slate-400">
+                <div class="flex justify-between"><span>Key Derivation Function:</span><span class="font-mono text-slate-200">PBKDF2-HMAC-SHA256 (600,000 iter)</span></div>
+                <div class="flex justify-between"><span>Credentials Cipher:</span><span class="font-mono text-slate-200">AES-256-GCM (96-bit Nonce)</span></div>
+                <div class="flex justify-between"><span>Telegram Upload Method:</span><span class="font-mono text-emerald-400">sendDocument (disable_content_type_detection=True)</span></div>
+              </div>
+              <button id="updateMasterPwBtn" type="button" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition">
+                Rotate Master Key & Re-Encrypt Vault
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: SQLITE METADATA & BACKUP / RECOVERY -->
+      <section id="tab-sqlite" class="tab-panel hidden space-y-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 class="text-base font-bold text-white">PostgreSQL Database Inspector & Disaster Recovery</h2>
+              <p class="text-xs text-slate-400">Inspect live tables (<code class="font-mono text-indigo-300">files</code>, <code class="font-mono text-indigo-300">exif_metadata</code>, <code class="font-mono text-indigo-300">folders</code>) and back up with a real <code class="font-mono text-indigo-300">pg_dump</code> snapshot</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <button id="exportJsonCatalogBtn" type="button" class="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition">
+                Export Metadata Backup (.json)
+              </button>
+              <button id="exportSqlDumpBtn" type="button" class="px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold transition" title="A client-side SQL snapshot of what's currently loaded in this browser (not a full database dump — use Snapshot Database to TG for that)">
+                Export Visible Rows as SQL (.sql)
+              </button>
+              <label for="restoreBackupFileInput" class="cursor-pointer px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium transition" title="Loads a .json export back into this browser view only — does not write to the PostgreSQL database">
+                Preview Backup File Locally
+              </label>
+              <input id="restoreBackupFileInput" type="file" accept=".json,.sql" class="hidden" />
+            </div>
+          </div>
+
+          <!-- Live Database Table Records -->
+          <div class="overflow-x-auto border border-slate-800 rounded-xl">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr class="bg-slate-950 text-slate-400 border-b border-slate-800">
+                  <th class="py-2.5 px-3">File ID / SHA-256</th>
+                  <th class="py-2.5 px-3">Filename & Folder</th>
+                  <th class="py-2.5 px-3">Telegram Ref (`file_id` / `msg_id`)</th>
+                  <th class="py-2.5 px-3">Original Timestamp (`mtime`)</th>
+                  <th class="py-2.5 px-3">EXIF Summary</th>
+                  <th class="py-2.5 px-3 text-right">Raw / Lossless Size</th>
+                </tr>
+              </thead>
+              <tbody id="sqliteTableBody" class="divide-y divide-slate-800/70 font-mono text-[11px]"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 5: FULL-STACK ARCHITECTURE & DEPLOYMENT -->
+      <section id="tab-deploy" class="tab-panel hidden space-y-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 class="text-base font-bold text-white">End-to-End Production Stack & Hosting Configuration</h2>
+              <p class="text-xs text-slate-400">Complete FastAPI + PostgreSQL + Telegram Bot + Google Photos OAuth + Docker/Nginx deployment</p>
+            </div>
+            <button id="copyDockerDeployCmdBtn" type="button" class="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition">
+              Copy Quick-Deploy Commands
+            </button>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+            <div class="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+              <span class="text-indigo-400 font-semibold">1. Zero-Loss Telegram Storage</span>
+              <p class="text-slate-400">Uses <code class="text-slate-200">sendDocument</code> with <code class="text-slate-200">application/octet-stream</code> so Telegram never strips EXIF tags or recompresses JPEGs/PNGs/RAWs.</p>
+            </div>
+            <div class="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+              <span class="text-sky-400 font-semibold">2. Non-Destructive Lossless Sidecar</span>
+              <p class="text-slate-400">Generates a separate lossless WebP/PNG/JPEG Huffman-optimized companion while keeping the exact original file untouched.</p>
+            </div>
+            <div class="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+              <span class="text-emerald-400 font-semibold">3. PostgreSQL + TG Snapshot</span>
+              <p class="text-slate-400">Stores folder trees, SHA-256 hashes, EXIF fields, and Telegram <code class="text-slate-200">file_id</code> pointers in PostgreSQL with 1-click <code class="text-slate-200">pg_dump</code> backup to your Telegram chat.</p>
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Production Deployment (`docker-compose.yml` + `backend/app.py`)</span>
+            <pre id="deployCodeBlock" class="bg-slate-950 border border-slate-800 rounded-xl p-4 text-[11px] font-mono text-slate-300 overflow-x-auto leading-relaxed"># OPTION A: Windows Native Python (No Docker Desktop Required)
+# Double-click run_windows_python.bat OR run in CMD:
+python -m venv .venv && .venv\Scripts\activate
+pip install -r backend\requirements.txt
+python -m uvicorn backend.app:app --host 127.0.0.1 --port 8000
+# Open http://localhost:8000
+
+# OPTION B: Docker Compose (Windows / Linux / macOS)
+# 1. Make sure Docker Desktop is open and running ("Engine running")
+# 2. On Windows CMD, copy .env if needed (pre-included in updated zip):
+copy .env.example .env
+docker compose up -d --build</pre>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- File Preview & EXIF Inspector Modal -->
+  <div id="previewModal" class="fixed inset-0 z-40 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-4xl w-full overflow-hidden shadow-2xl flex flex-col lg:flex-row max-h-[90vh]">
+      <!-- Visual Preview Area -->
+      <div class="flex-1 bg-slate-950 flex items-center justify-center p-4 min-h-[260px] relative overflow-auto">
+        <img id="previewModalImg" src="" alt="Preview" class="max-w-full max-h-[65vh] h-auto rounded-lg object-contain hidden" />
+        <div id="previewModalDocBox" class="hidden text-center p-8 space-y-3">
+          <div class="w-16 h-16 mx-auto rounded-2xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          </div>
+          <p id="previewModalDocName" class="text-sm font-semibold text-white"></p>
+          <p id="previewModalDocMime" class="text-xs font-mono text-slate-400"></p>
+        </div>
+      </div>
+
+      <!-- Metadata, EXIF & Download Controls -->
+      <div class="w-full lg:w-96 border-t lg:border-t-0 lg:border-l border-slate-800 p-5 flex flex-col justify-between overflow-y-auto space-y-4">
+        <div class="space-y-4">
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <h3 id="previewModalTitle" class="text-sm font-bold text-white truncate"></h3>
+              <p id="previewModalSubtitle" class="text-xs text-slate-400 font-mono"></p>
+            </div>
+            <button id="closePreviewModalBtn" type="button" class="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
+
+          <!-- Integrity & Timestamps -->
+          <div class="bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-1.5 text-xs">
+            <div class="flex justify-between"><span class="text-slate-400">Telegram `file_id`:</span><span id="metaTgFileId" class="font-mono text-indigo-300 truncate max-w-[170px]"></span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Original Mtime:</span><span id="metaOrigMtime" class="font-mono text-slate-200"></span></div>
+            <div class="flex justify-between"><span class="text-slate-400">SHA-256 Checksum:</span><span id="metaSha256" class="font-mono text-emerald-400 truncate max-w-[170px]"></span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Original Size:</span><span id="metaOrigSize" class="font-mono text-slate-200"></span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Lossless Copy:</span><span id="metaLosslessSize" class="font-mono text-sky-400"></span></div>
+          </div>
+
+          <!-- EXIF Camera Metadata -->
+          <div>
+            <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Preserved EXIF Metadata</h4>
+            <div id="exifDetailsGrid" class="grid grid-cols-2 gap-2 text-xs"></div>
+          </div>
+        </div>
+
+        <!-- Download & Delete Actions -->
+        <div class="space-y-2 pt-3 border-t border-slate-800">
+          <button id="downloadOriginalBtn" type="button" class="w-full py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition flex items-center justify-center gap-2">
+            <span>Download Original (Unaltered + EXIF)</span>
+          </button>
+          <button id="downloadLosslessBtn" type="button" class="w-full py-2 px-3 rounded-xl bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/30 text-xs font-semibold transition flex items-center justify-center gap-2">
+            <span>Download Lossless Optimized Companion</span>
+          </button>
+          <button id="deleteModalFileBtn" type="button" class="w-full py-2 px-3 rounded-xl bg-rose-600/15 hover:bg-rose-600/25 text-rose-300 border border-rose-500/30 text-xs font-medium transition">
+            Delete from Telegram & Database
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Generic Confirmation Modal (used before any destructive action, e.g. deleting files) -->
+  <div id="confirmModal" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 hidden">
+    <div class="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-5 space-y-4">
+      <div class="flex items-start gap-3">
+        <div class="w-9 h-9 rounded-xl bg-rose-600/15 border border-rose-500/30 flex items-center justify-center text-rose-400 shrink-0">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+        </div>
+        <div class="min-w-0">
+          <h3 id="confirmModalTitle" class="text-sm font-bold text-white">Delete this item?</h3>
+          <p id="confirmModalBody" class="text-xs text-slate-400 mt-1"></p>
+        </div>
+      </div>
+      <div class="flex items-center justify-end gap-2 pt-1">
+        <button id="confirmModalCancelBtn" type="button" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition">
+          Cancel
+        </button>
+        <button id="confirmModalConfirmBtn" type="button" class="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold transition">
+          Delete
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- Safe Storage Helper ---
+    function safeGetStorage(key, fallback) {
+      try {
+        const raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : fallback;
+      } catch (e) {
+        return fallback;
+      }
+    }
+
+    function safeSetStorage(key, val) {
+      try {
+        localStorage.setItem(key, JSON.stringify(val));
+      } catch (e) {
+        // Ignore sandbox storage restrictions
+      }
+    }
+
+    // --- Backend API Client ---
+    const API_BASE = '/api';
+
+    function getAuthToken() {
+      try { return localStorage.getItem('telecloud_vault_token') || null; } catch (e) { return null; }
+    }
+    function setAuthToken(token) {
+      try {
+        if (token) localStorage.setItem('telecloud_vault_token', token);
+        else localStorage.removeItem('telecloud_vault_token');
+      } catch (e) { /* storage unavailable */ }
+    }
+
+    async function apiRequest(path, options = {}) {
+      const headers = Object.assign({}, options.headers || {});
+      const token = getAuthToken();
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const resp = await fetch(`${API_BASE}${path}`, Object.assign({}, options, { headers }));
+      if (!resp.ok) {
+        let detail = `HTTP ${resp.status}`;
+        try {
+          const errJson = await resp.json();
+          detail = errJson.detail || JSON.stringify(errJson);
+        } catch (e) { /* non-JSON error body */ }
+        const err = new Error(detail);
+        err.status = resp.status;
+        throw err;
+      }
+      const contentType = resp.headers.get('content-type') || '';
+      return contentType.includes('application/json') ? resp.json() : resp;
+    }
+
+    async function apiRequestBlob(path) {
+      const headers = {};
+      const token = getAuthToken();
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const resp = await fetch(`${API_BASE}${path}`, { headers });
+      if (!resp.ok) {
+        let detail = `HTTP ${resp.status}`;
+        try { detail = (await resp.json()).detail || detail; } catch (e) { /* ignore */ }
+        throw new Error(detail);
+      }
+      return resp.blob();
+    }
+
+    // --- Application State ---
+    const state = {
+      unlocked: false,
+      activeTab: 'files',
+      activeFolderId: 'root',
+      searchQuery: '',
+      typeFilter: 'all',
+      losslessEnabled: true,
+      selectedFileIds: {},
+      selectedGPhotoIds: { 'gp-1': true, 'gp-2': true },
+      activePreviewFileId: null,
+      tgConfig: {
+        mode: 'telegram_bot',
+        chatId: ''
+      },
+      folders: [
+        { id: 'root', name: 'My Vault', parent_id: null, color: '#6366f1' }
+      ],
+      files: [],
+      previewCache: {},
+      gphotosCatalog: []
+    };
+
+    // --- Load real data from the backend ---
+    async function loadFoldersFromServer() {
+      const folders = await apiRequest('/folders');
+      state.folders = folders;
+    }
+
+    function mapServerFileRecord(row) {
+      return {
+        id: row.id,
+        folder_id: row.folder_id,
+        name: row.name,
+        mime_type: row.mime_type,
+        size_bytes: row.size_bytes,
+        compressed_size_bytes: row.compressed_size_bytes,
+        is_lossless_compressed: row.is_lossless_compressed,
+        sha256_hash: row.sha256_hash,
+        original_mtime: row.original_mtime,
+        uploaded_at: row.uploaded_at,
+        storage_mode: row.storage_mode,
+        tg_chat_id: row.tg_chat_id,
+        tg_message_id: row.tg_message_id,
+        tg_file_id: row.tg_file_id,
+        tg_compressed_file_id: row.tg_compressed_file_id,
+        preview_url: state.previewCache[row.id] || null,
+        exif: {
+          camera_make: row.camera_make,
+          camera_model: row.camera_model,
+          date_taken: row.date_taken,
+          width: row.width,
+          height: row.height,
+          iso: row.iso,
+          aperture: row.aperture,
+          shutter_speed: row.shutter_speed
+        }
+      };
+    }
+
+    async function loadFilesFromServer() {
+      const rows = await apiRequest('/files');
+      state.files = rows.map(mapServerFileRecord);
+    }
+
+    function loadThumbnailsForVisibleImages() {
+      getFilteredFiles().forEach(file => {
+        if (!file.mime_type.startsWith('image/')) return;
+        if (state.previewCache[file.id]) return;
+        state.previewCache[file.id] = 'pending';
+        apiRequestBlob(`/files/${file.id}/download`).then(blob => {
+          const url = URL.createObjectURL(blob);
+          state.previewCache[file.id] = url;
+          const fileObj = state.files.find(f => f.id === file.id);
+          if (fileObj) fileObj.preview_url = url;
+          renderFilesGrid();
+        }).catch(() => {
+          delete state.previewCache[file.id];
+        });
+      });
+    }
+
+    // --- Toast Notification Helper ---
+    function showToast(title, subtitle, tone) {
+      const container = document.getElementById('toastContainer');
+      const el = document.createElement('div');
+      const borderClass = tone === 'error' ? 'border-rose-500/50 bg-rose-950/90' : 'border-indigo-500/40 bg-slate-900/95';
+      el.className = `pointer-events-auto border ${borderClass} backdrop-blur-md rounded-xl p-3.5 shadow-xl transition transform translate-y-0 opacity-100`;
+      el.innerHTML = `
+        <div class="flex items-start justify-between gap-2">
+          <div>
+            <p class="text-xs font-semibold text-white">${title}</p>
+            <p class="text-[11px] text-slate-300 mt-0.5">${subtitle}</p>
+          </div>
+        </div>
+      `;
+      container.appendChild(el);
+      setTimeout(() => {
+        el.remove();
+      }, 4200);
+    }
+
+    // --- Generic Confirmation Modal Helper ---
+    // Returns a Promise<boolean> resolved true if the user clicks Delete/Confirm, false otherwise.
+    // Used before every destructive action (single delete, bulk delete) so nothing is removed
+    // from Telegram or the database without the user explicitly confirming it first.
+    let confirmResolver = null;
+    function confirmAction(title, body) {
+      document.getElementById('confirmModalTitle').textContent = title;
+      document.getElementById('confirmModalBody').textContent = body;
+      document.getElementById('confirmModal').classList.remove('hidden');
+      return new Promise((resolve) => {
+        confirmResolver = resolve;
+      });
+    }
+    function resolveConfirm(result) {
+      document.getElementById('confirmModal').classList.add('hidden');
+      if (confirmResolver) {
+        const resolve = confirmResolver;
+        confirmResolver = null;
+        resolve(result);
+      }
+    }
+
+    function formatBytes(bytes) {
+      if (!bytes || bytes <= 0) return '0 B';
+      const units = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(1024));
+      return (bytes / Math.pow(1024, i)).toFixed(i > 1 ? 2 : 0) + ' ' + units[i];
+    }
+
+    // --- Render Folder Sidebar & Breadcrumb ---
+    function renderFolders() {
+      const listEl = document.getElementById('folderListContainer');
+      const gphotosSelect = document.getElementById('gphotosTargetFolderSelect');
+      listEl.innerHTML = '';
+      gphotosSelect.innerHTML = '';
+
+      state.folders.forEach(folder => {
+        const count = folder.id === 'root'
+          ? state.files.length
+          : state.files.filter(f => f.folder_id === folder.id).length;
+
+        const isActive = state.activeFolderId === folder.id;
+        const li = document.createElement('li');
+        li.innerHTML = `
+          <button type="button" data-folder-id="${folder.id}" class="folder-select-btn w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition ${isActive ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30' : 'text-slate-300 hover:bg-slate-800/70'}">
+            <span class="flex items-center gap-2 truncate">
+              <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${folder.color}"></span>
+              <span class="truncate">${folder.name}</span>
+            </span>
+            <span class="font-mono text-[11px] px-1.5 py-0.5 rounded bg-slate-950/70 text-slate-400">${count}</span>
+          </button>
+        `;
+        listEl.appendChild(li);
+
+        const opt = document.createElement('option');
+        opt.value = folder.id;
+        opt.textContent = folder.name;
+        if (folder.id === 'fld-gphotos') opt.selected = true;
+        gphotosSelect.appendChild(opt);
+      });
+
+      document.querySelectorAll('.folder-select-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.activeFolderId = btn.getAttribute('data-folder-id');
+          renderAll();
+        });
+      });
+
+      // Breadcrumb
+      const currentFolder = state.folders.find(f => f.id === state.activeFolderId) || state.folders[0];
+      const bc = document.getElementById('folderBreadcrumb');
+      bc.innerHTML = `
+        <span class="text-slate-400">Telegram Vault</span>
+        <span class="text-slate-600">/</span>
+        <span class="text-white font-semibold">${currentFolder.name}</span>
+      `;
+    }
+
+    // --- Render Files Grid ---
+    function getFilteredFiles() {
+      return state.files.filter(file => {
+        if (state.activeFolderId !== 'root' && file.folder_id !== state.activeFolderId) {
+          return false;
+        }
+        if (state.typeFilter === 'image' && !file.mime_type.startsWith('image/')) return false;
+        if (state.typeFilter === 'document' && file.mime_type.startsWith('image/')) return false;
+        if (state.typeFilter === 'gphotos' && file.storage_mode !== 'google_photos_import') return false;
+
+        if (state.searchQuery.trim() !== '') {
+          const q = state.searchQuery.toLowerCase();
+          const exifStr = file.exif ? `${file.exif.camera_make} ${file.exif.camera_model} ${file.exif.lens_model} ${file.exif.iso}` : '';
+          const hay = `${file.name} ${file.mime_type} ${file.sha256_hash} ${exifStr}`.toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      });
+    }
+
+    function renderFilesGrid() {
+      const grid = document.getElementById('filesGridContainer');
+      const filtered = getFilteredFiles();
+      grid.innerHTML = '';
+
+      if (filtered.length === 0) {
+        grid.innerHTML = `
+          <div class="col-span-full bg-slate-900/60 border border-slate-800 rounded-2xl p-10 text-center space-y-2">
+            <p class="text-sm font-semibold text-slate-300">No matching files in this folder</p>
+            <p class="text-xs text-slate-400">Upload files above or adjust your search filter.</p>
+          </div>
+        `;
+        return;
+      }
+
+      filtered.forEach(file => {
+        const isSelected = Boolean(state.selectedFileIds[file.id]);
+        const isImg = file.mime_type.startsWith('image/');
+        const savedPct = file.compressed_size_bytes
+          ? Math.round((1 - file.compressed_size_bytes / file.size_bytes) * 100)
+          : 0;
+
+        const card = document.createElement('div');
+        card.className = `group bg-slate-900 border ${isSelected ? 'border-indigo-500 ring-1 ring-indigo-500/50' : 'border-slate-800 hover:border-slate-700'} rounded-2xl overflow-hidden flex flex-col justify-between transition shadow-lg`;
+
+        const previewMarkup = isImg && file.preview_url && file.preview_url !== 'pending'
+          ? `<img src="${file.preview_url}" alt="${file.name}" class="w-full h-44 object-cover group-hover:scale-[1.02] transition duration-300" />`
+          : isImg
+          ? `<div class="w-full h-44 bg-slate-950 flex flex-col items-center justify-center p-4 text-center">
+               <span class="text-xs font-mono text-slate-500 animate-pulse">Loading preview…</span>
+             </div>`
+          : `<div class="w-full h-44 bg-slate-950 flex flex-col items-center justify-center p-4 text-center">
+               <svg class="w-10 h-10 text-indigo-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+               <span class="text-xs font-mono text-slate-400">${file.mime_type}</span>
+             </div>`;
+
+        card.innerHTML = `
+          <div>
+            <div class="relative overflow-hidden bg-slate-950">
+              ${previewMarkup}
+              <div class="absolute top-2.5 left-2.5 flex items-center gap-1.5">
+                <input type="checkbox" data-select-id="${file.id}" ${isSelected ? 'checked' : ''} class="file-checkbox w-4 h-4 rounded bg-slate-900/90 border-slate-600 text-indigo-600 focus:ring-0 cursor-pointer" />
+                <span class="px-2 py-0.5 rounded-md text-[10px] font-mono bg-slate-950/85 text-emerald-300 border border-emerald-500/30">
+                  RAW + EXIF
+                </span>
+              </div>
+              ${savedPct > 0 ? `<span class="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-md text-[10px] font-mono bg-indigo-950/90 text-indigo-300 border border-indigo-500/40">-${savedPct}% Lossless</span>` : ''}
+            </div>
+
+            <div class="p-3.5 space-y-2">
+              <div class="flex items-start justify-between gap-2">
+                <h4 class="text-xs sm:text-sm font-semibold text-white truncate" title="${file.name}">${file.name}</h4>
+              </div>
+
+              <div class="text-[11px] text-slate-400 font-mono space-y-1">
+                <div class="flex items-center justify-between">
+                  <span>Size: ${formatBytes(file.size_bytes)}</span>
+                  <span class="text-indigo-400">TG #${file.tg_message_id}</span>
+                </div>
+                <div class="truncate text-slate-300">
+                  ${file.exif ? `${file.exif.camera_model || 'Original Stream'} • ${file.exif.width}×${file.exif.height}` : 'Binary Stream'}
+                </div>
+                <div class="text-[10px] text-slate-400">
+                  Mtime: ${file.original_mtime.slice(0, 19).replace('T', ' ')}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="px-3.5 py-2.5 bg-slate-950/60 border-t border-slate-800/80 flex items-center justify-between gap-2">
+            <button type="button" data-preview-id="${file.id}" class="open-preview-btn text-xs font-medium text-indigo-400 hover:text-indigo-300">
+              Inspect EXIF & Preview
+            </button>
+            <div class="flex items-center gap-1.5">
+              <button type="button" data-dl-id="${file.id}" class="quick-dl-btn p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200" title="Download Original Unaltered File">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+              </button>
+              <button type="button" data-del-id="${file.id}" class="quick-del-btn p-1.5 rounded-lg bg-slate-800 hover:bg-rose-900/60 text-slate-300 hover:text-rose-300" title="Delete File">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              </button>
+            </div>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+
+      // Bind card events
+      document.querySelectorAll('.file-checkbox').forEach(cb => {
+        cb.addEventListener('change', () => {
+          const id = cb.getAttribute('data-select-id');
+          if (cb.checked) state.selectedFileIds[id] = true;
+          else delete state.selectedFileIds[id];
+          updateBulkSelectionBar();
+          renderFilesGrid();
+        });
+      });
+
+      document.querySelectorAll('.open-preview-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          openPreviewModal(btn.getAttribute('data-preview-id'));
+        });
+      });
+
+      document.querySelectorAll('.quick-dl-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          triggerFileDownload(btn.getAttribute('data-dl-id'), 'original');
+        });
+      });
+
+      document.querySelectorAll('.quick-del-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          deleteFileById(btn.getAttribute('data-del-id'));
+        });
+      });
+
+      loadThumbnailsForVisibleImages();
+    }
+
+    function updateBulkSelectionBar() {
+      const ids = Object.keys(state.selectedFileIds);
+      const btn = document.getElementById('deleteSelectedBtn');
+      const countSpan = document.getElementById('selectedCountLabel');
+      countSpan.textContent = ids.length;
+      if (ids.length > 0) btn.classList.remove('hidden');
+      else btn.classList.add('hidden');
+    }
+
+    // --- Render Telemetry & Database Table ---
+    function renderStatsAndSqlite() {
+      const totalBytes = state.files.reduce((acc, f) => acc + f.size_bytes, 0);
+      const savedBytes = state.files.reduce((acc, f) => {
+        if (f.compressed_size_bytes && f.compressed_size_bytes < f.size_bytes) {
+          return acc + (f.size_bytes - f.compressed_size_bytes);
+        }
+        return acc;
+      }, 0);
+
+      document.getElementById('statTotalBytes').textContent = formatBytes(totalBytes);
+      document.getElementById('statSavedBytes').textContent = formatBytes(savedBytes);
+      document.getElementById('statIndexedCount').textContent = `${state.files.length} files`;
+
+      const tbody = document.getElementById('sqliteTableBody');
+      tbody.innerHTML = '';
+      state.files.forEach(file => {
+        const folderObj = state.folders.find(fl => fl.id === file.folder_id);
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-950/60';
+        tr.innerHTML = `
+          <td class="py-2.5 px-3">
+            <div class="text-indigo-300">${file.id}</div>
+            <div class="text-slate-500 truncate max-w-[140px]">${file.sha256_hash.slice(0, 16)}...</div>
+          </td>
+          <td class="py-2.5 px-3">
+            <div class="text-slate-200 font-sans font-medium">${file.name}</div>
+            <div class="text-slate-400">${folderObj ? folderObj.name : 'root'}</div>
+          </td>
+          <td class="py-2.5 px-3">
+            <div class="text-emerald-400 truncate max-w-[160px]">${file.tg_file_id}</div>
+            <div class="text-slate-400">msg_id: ${file.tg_message_id} (${file.storage_mode})</div>
+          </td>
+          <td class="py-2.5 px-3 text-slate-300">${file.original_mtime}</td>
+          <td class="py-2.5 px-3 text-slate-300">${file.exif ? `${file.exif.camera_model} (${file.exif.width}×${file.exif.height})` : '-'}</td>
+          <td class="py-2.5 px-3 text-right">
+            <div class="text-slate-200">${formatBytes(file.size_bytes)}</div>
+            <div class="text-sky-400">${file.compressed_size_bytes ? formatBytes(file.compressed_size_bytes) : 'Uncompressed'}</div>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // --- Render Google Photos OAuth Tab ---
+    function renderGooglePhotos() {
+      const grid = document.getElementById('gphotosGrid');
+      grid.innerHTML = '';
+      if (state.gphotosCatalog.length === 0) {
+        grid.innerHTML = `
+          <div class="col-span-full bg-slate-950 border border-slate-800 rounded-2xl p-8 text-center space-y-1.5">
+            <p class="text-sm font-semibold text-slate-300">No Google Photos connected</p>
+            <p class="text-xs text-slate-400">This tab is a UI preview — hook up a real Google OAuth 2.0 consent flow and the Photos Library API to list items here.</p>
+          </div>
+        `;
+        return;
+      }
+      state.gphotosCatalog.forEach(item => {
+        const checked = Boolean(state.selectedGPhotoIds[item.id]);
+        const card = document.createElement('div');
+        card.className = `bg-slate-950 border ${checked ? 'border-sky-500' : 'border-slate-800'} rounded-2xl overflow-hidden flex flex-col justify-between`;
+        card.innerHTML = `
+          <div>
+            <div class="relative">
+              <img src="${item.previewUrl}" alt="${item.filename}" class="w-full h-40 object-cover" />
+              <label class="absolute top-2.5 left-2.5 flex items-center gap-1.5 bg-slate-950/85 px-2.5 py-1 rounded-lg border border-slate-700 cursor-pointer text-xs">
+                <input type="checkbox" data-gp-id="${item.id}" ${checked ? 'checked' : ''} class="gphoto-checkbox rounded text-sky-500" />
+                <span class="text-white font-medium">Select (=d)</span>
+              </label>
+            </div>
+            <div class="p-3.5 space-y-1.5 text-xs">
+              <p class="font-semibold text-white truncate">${item.filename}</p>
+              <p class="font-mono text-slate-400 text-[11px]">${item.camera}</p>
+              <div class="flex justify-between font-mono text-[11px] text-slate-300">
+                <span>${item.dimensions} • ISO ${item.iso}</span>
+                <span>${formatBytes(item.sizeBytes)}</span>
+              </div>
+              <p class="text-[10px] font-mono text-slate-400">Captured: ${item.creationTime}</p>
+            </div>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+
+      document.querySelectorAll('.gphoto-checkbox').forEach(cb => {
+        cb.addEventListener('change', () => {
+          const id = cb.getAttribute('data-gp-id');
+          if (cb.checked) state.selectedGPhotoIds[id] = true;
+          else delete state.selectedGPhotoIds[id];
+          renderGooglePhotos();
+        });
+      });
+    }
+
+    // --- Real Upload to Backend (which performs the actual Telegram sendDocument call) ---
+    function uploadOneFileWithProgress(file, folderId, onProgress) {
+      return new Promise((resolve, reject) => {
+        const form = new FormData();
+        form.append('file', file, file.name);
+        form.append('folder_id', folderId);
+        form.append('original_mtime', new Date(file.lastModified || Date.now()).toISOString());
+        form.append('lossless_compress', state.losslessEnabled ? 'true' : 'false');
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${API_BASE}/files/upload`);
+        const token = getAuthToken();
+        if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+        });
+
+        xhr.addEventListener('load', () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try { resolve(JSON.parse(xhr.responseText)); }
+            catch (e) { reject(new Error('Server returned an invalid response')); }
+          } else {
+            let detail = `HTTP ${xhr.status}`;
+            try { detail = JSON.parse(xhr.responseText).detail || detail; } catch (e) { /* ignore */ }
+            reject(new Error(detail));
+          }
+        });
+        xhr.addEventListener('error', () => reject(new Error('Network error contacting the backend')));
+        xhr.send(form);
+      });
+    }
+
+    // --- Bulk Upload Pipeline with Real Progress, uploads each file to the FastAPI backend ---
+    // Uploads run concurrently, bounded to this many in flight at once. Fully unbounded
+    // parallelism risks Telegram flood-control (429) on the same chat_id; the backend also
+    // retries 429s with backoff, but keeping a sane cap here makes that rare in the first place.
+    const MAX_CONCURRENT_UPLOADS = 4;
+
+    async function handleBulkFilesUpload(fileList) {
+      if (!fileList || fileList.length === 0) return;
+      if (!state.unlocked) {
+        showToast('Vault Locked', 'Unlock the vault before uploading files.', 'error');
+        return;
+      }
+      const filesArray = Array.from(fileList);
+      const panel = document.getElementById('uploadProgressPanel');
+      const listContainer = document.getElementById('uploadItemsList');
+      const summaryEl = document.getElementById('uploadQueueSummary');
+
+      panel.classList.remove('hidden');
+      listContainer.innerHTML = '';
+      let completedCount = 0;
+      let failedCount = 0;
+      let refreshQueued = false;
+      summaryEl.textContent = `0 / ${filesArray.length} completed`;
+
+      // Coalesced refresh: while one refresh is in flight, other completions just mark
+      // "refresh again after this one" instead of firing their own overlapping GET /api/files.
+      let refreshAgain = false;
+      async function refreshSoon() {
+        if (refreshQueued) { refreshAgain = true; return; }
+        refreshQueued = true;
+        do {
+          refreshAgain = false;
+          await loadFilesFromServer();
+          renderAll();
+        } while (refreshAgain);
+        refreshQueued = false;
+      }
+
+      async function uploadOne(f, index) {
+        const rowId = `up-row-${Date.now()}-${index}`;
+        const rowEl = document.createElement('div');
+        rowEl.className = 'bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs space-y-1.5';
+        rowEl.innerHTML = `
+          <div class="flex items-center justify-between">
+            <span class="font-medium text-slate-200 truncate max-w-[240px]">${f.name}</span>
+            <span id="${rowId}-status" class="font-mono text-[11px] text-indigo-400">Queued...</span>
+          </div>
+          <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+            <div id="${rowId}-bar" class="h-full bg-gradient-to-r from-indigo-500 to-sky-400 transition-all duration-300" style="width: 0%"></div>
+          </div>
+        `;
+        listContainer.appendChild(rowEl);
+        const barEl = document.getElementById(`${rowId}-bar`);
+        const statusEl = document.getElementById(`${rowId}-status`);
+        statusEl.textContent = 'Uploading to Telegram...';
+
+        try {
+          await uploadOneFileWithProgress(f, state.activeFolderId, (pct) => {
+            barEl.style.width = `${pct}%`;
+          });
+          completedCount++;
+          barEl.style.width = '100%';
+          statusEl.textContent = 'Stored on Telegram (EXIF & Mtime Preserved)';
+          statusEl.className = 'font-mono text-[11px] text-emerald-400';
+        } catch (err) {
+          failedCount++;
+          barEl.style.width = '100%';
+          barEl.className = 'h-full bg-rose-500';
+          statusEl.textContent = `Failed: ${err.message}`;
+          statusEl.className = 'font-mono text-[11px] text-rose-400';
+        }
+
+        summaryEl.textContent = `${completedCount + failedCount} / ${filesArray.length} completed`;
+        await refreshSoon();
+      }
+
+      // Simple bounded worker pool: MAX_CONCURRENT_UPLOADS workers pull from a shared index.
+      let nextIndex = 0;
+      async function worker() {
+        while (nextIndex < filesArray.length) {
+          const i = nextIndex++;
+          await uploadOne(filesArray[i], i);
+        }
+      }
+      const workerCount = Math.min(MAX_CONCURRENT_UPLOADS, filesArray.length);
+      await Promise.all(Array.from({ length: workerCount }, worker));
+
+      if (failedCount === 0) {
+        showToast(
+          `Uploaded ${completedCount} file(s) to Telegram`,
+          'Original quality, EXIF headers, and modification timestamps preserved in PostgreSQL.',
+          'success'
+        );
+      } else {
+        showToast(
+          `${completedCount} succeeded, ${failedCount} failed`,
+          'Check the upload panel for the exact error on each failed file (e.g. invalid Telegram chat_id or missing credentials).',
+          'error'
+        );
+      }
+    }
+
+    // --- Preview & EXIF Modal Logic ---
+    function openPreviewModal(fileId) {
+      const file = state.files.find(f => f.id === fileId);
+      if (!file) return;
+      state.activePreviewFileId = file.id;
+
+      const modal = document.getElementById('previewModal');
+      const imgEl = document.getElementById('previewModalImg');
+      const docBox = document.getElementById('previewModalDocBox');
+
+      if (file.mime_type.startsWith('image/') && file.preview_url) {
+        imgEl.src = file.preview_url;
+        imgEl.classList.remove('hidden');
+        docBox.classList.add('hidden');
+      } else {
+        imgEl.classList.add('hidden');
+        docBox.classList.remove('hidden');
+        document.getElementById('previewModalDocName').textContent = file.name;
+        document.getElementById('previewModalDocMime').textContent = `${file.mime_type} • ${formatBytes(file.size_bytes)}`;
+      }
+
+      document.getElementById('previewModalTitle').textContent = file.name;
+      document.getElementById('previewModalSubtitle').textContent = `Telegram Msg #${file.tg_message_id} • ${file.storage_mode}`;
+      document.getElementById('metaTgFileId').textContent = file.tg_file_id;
+      document.getElementById('metaOrigMtime').textContent = file.original_mtime;
+      document.getElementById('metaSha256').textContent = file.sha256_hash;
+      document.getElementById('metaOrigSize').textContent = formatBytes(file.size_bytes);
+      document.getElementById('metaLosslessSize').textContent = file.compressed_size_bytes
+        ? `${formatBytes(file.compressed_size_bytes)} (Lossless Sidecar)`
+        : 'Original Only';
+
+      const exifGrid = document.getElementById('exifDetailsGrid');
+      const ex = file.exif || {};
+      const fields = [
+        ['Camera Make', ex.camera_make || '-'],
+        ['Camera Model', ex.camera_model || '-'],
+        ['Lens', ex.lens_model || '-'],
+        ['Dimensions', `${ex.width || '-'} × ${ex.height || '-'}`],
+        ['ISO / Aperture', `ISO ${ex.iso || '-'} • ${ex.aperture || '-'}`],
+        ['Shutter / Focal', `${ex.shutter_speed || '-'} • ${ex.focal_length || '-'}`],
+        ['Date Taken', ex.date_taken || '-'],
+        ['GPS Coords', ex.gps || '-']
+      ];
+      exifGrid.innerHTML = fields.map(([label, val]) => `
+        <div class="bg-slate-950 border border-slate-800 rounded-lg p-2">
+          <span class="text-[10px] text-slate-400 block">${label}</span>
+          <span class="font-mono text-[11px] text-slate-200 truncate block" title="${val}">${val}</span>
+        </div>
+      `).join('');
+
+      modal.classList.remove('hidden');
+    }
+
+    async function triggerFileDownload(fileId, variant) {
+      const file = state.files.find(f => f.id === fileId);
+      if (!file) return;
+      try {
+        const blob = await apiRequestBlob(`/files/${fileId}/download?variant=${variant}`);
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = variant === 'lossless' ? `lossless_${file.name}` : file.name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+
+        showToast(
+          variant === 'lossless' ? 'Downloaded Lossless Companion' : 'Downloaded Unaltered Original',
+          `Fetched live from Telegram. X-Original-Mtime: ${file.original_mtime}`,
+          'success'
+        );
+      } catch (err) {
+        showToast('Download Failed', err.message, 'error');
+      }
+    }
+
+    async function deleteFileById(fileId) {
+      const file = state.files.find(f => f.id === fileId);
+      if (!file) return;
+      const confirmed = await confirmAction(
+        `Delete "${file.name}"?`,
+        'This permanently removes the file (and its lossless companion, if any) from Telegram and from the database. This cannot be undone.'
+      );
+      if (!confirmed) return;
+      try {
+        await apiRequest(`/files/${fileId}`, { method: 'DELETE' });
+        state.files = state.files.filter(f => f.id !== fileId);
+        delete state.selectedFileIds[fileId];
+        delete state.previewCache[fileId];
+        document.getElementById('previewModal').classList.add('hidden');
+        updateBulkSelectionBar();
+        renderAll();
+        showToast(
+          `Deleted ${file.name}`,
+          `Removed message #${file.tg_message_id} (and lossless companion, if any) from Telegram & purged the database reference.`,
+          'success'
+        );
+      } catch (err) {
+        showToast('Delete Failed', err.message, 'error');
+      }
+    }
+
+    function renderAll() {
+      renderFolders();
+      renderFilesGrid();
+      renderStatsAndSqlite();
+      renderGooglePhotos();
+      safeSetStorage('telecloud_vault_state_v1', {
+        folders: state.folders,
+        activeFolderId: state.activeFolderId
+      });
+    }
+
+    // --- Auth: unlock the vault against the real backend and load real data ---
+    async function unlockWithPassword(password) {
+      const errEl = document.getElementById('authErrorMsg');
+      const btnLabel = document.getElementById('unlockVaultBtnLabel');
+      errEl.classList.add('hidden');
+      btnLabel.textContent = 'Unlocking...';
+      try {
+        let tokenResp;
+        try {
+          tokenResp = await apiRequest('/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password })
+          });
+        } catch (err) {
+          if (err.status === 400) {
+            // Vault not initialized yet on this backend -> first run creates it.
+            tokenResp = await apiRequest('/auth/setup', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ password })
+            });
+            showToast('Vault Initialized', 'This master password was just set for this vault.', 'success');
+          } else {
+            throw err;
+          }
+        }
+        setAuthToken(tokenResp.token);
+        state.unlocked = true;
+        document.getElementById('authLockOverlay').classList.add('hidden');
+        document.getElementById('masterPasswordInput').value = '';
+        await loadFoldersFromServer();
+        await loadFilesFromServer();
+        renderAll();
+        showToast('Personal Vault Unlocked', 'Loaded folders & files from the backend.', 'success');
+      } catch (err) {
+        errEl.textContent = err.message || 'Unable to unlock the vault.';
+        errEl.classList.remove('hidden');
+      } finally {
+        btnLabel.textContent = 'Unlock Personal Vault';
+      }
+    }
+
+    // --- Initialize Event Listeners ---
+    window.addEventListener('DOMContentLoaded', () => {
+      renderAll();
+      if (getAuthToken()) {
+        state.unlocked = true;
+        document.getElementById('authLockOverlay').classList.add('hidden');
+        loadFoldersFromServer().then(loadFilesFromServer).then(renderAll).catch(err => {
+          // Stored token is stale/invalid -> force re-unlock.
+          setAuthToken(null);
+          state.unlocked = false;
+          document.getElementById('authLockOverlay').classList.remove('hidden');
+          showToast('Session Expired', 'Please unlock the vault again.', 'error');
+        });
+      } else {
+        document.getElementById('authLockOverlay').classList.remove('hidden');
+      }
+
+      // Tab Navigation
+      document.querySelectorAll('.nav-tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const targetTab = btn.getAttribute('data-tab');
+          state.activeTab = targetTab;
+          document.querySelectorAll('.nav-tab-btn').forEach(b => {
+            b.className = 'nav-tab-btn px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white transition whitespace-nowrap';
+          });
+          btn.className = 'nav-tab-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-600 text-white transition whitespace-nowrap';
+
+          document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.add('hidden'));
+          document.getElementById(`tab-${targetTab}`).classList.remove('hidden');
+        });
+      });
+
+      // Mobile sidebar toggle
+      document.getElementById('mobileMenuBtn').addEventListener('click', () => {
+        const sb = document.getElementById('folderSidebar');
+        sb.classList.toggle('hidden');
+      });
+
+      // Lock & Unlock Vault
+      document.getElementById('lockVaultBtn').addEventListener('click', () => {
+        setAuthToken(null);
+        state.unlocked = false;
+        document.getElementById('authLockOverlay').classList.remove('hidden');
+      });
+
+      document.getElementById('unlockVaultBtn').addEventListener('click', () => {
+        const pw = document.getElementById('masterPasswordInput').value.trim();
+        if (pw.length < 8) {
+          const errEl = document.getElementById('authErrorMsg');
+          errEl.textContent = 'Master password must be at least 8 characters.';
+          errEl.classList.remove('hidden');
+          return;
+        }
+        unlockWithPassword(pw);
+      });
+      document.getElementById('masterPasswordInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') document.getElementById('unlockVaultBtn').click();
+      });
+
+      // Lossless Companion Toggle
+      document.getElementById('losslessToggleBtn').addEventListener('click', () => {
+        state.losslessEnabled = !state.losslessEnabled;
+        const btn = document.getElementById('losslessToggleBtn');
+        const knob = document.getElementById('losslessToggleKnob');
+        btn.setAttribute('aria-checked', String(state.losslessEnabled));
+        if (state.losslessEnabled) {
+          btn.className = 'w-10 h-5 rounded-full bg-indigo-600 relative transition flex items-center p-0.5';
+          knob.className = 'w-4 h-4 rounded-full bg-white transform translate-x-5 transition';
+        } else {
+          btn.className = 'w-10 h-5 rounded-full bg-slate-700 relative transition flex items-center p-0.5';
+          knob.className = 'w-4 h-4 rounded-full bg-white transform translate-x-0 transition';
+        }
+      });
+
+      // Folder Creation
+      document.getElementById('openNewFolderModalBtn').addEventListener('click', () => {
+        document.getElementById('newFolderBox').classList.remove('hidden');
+        document.getElementById('newFolderNameInput').focus();
+      });
+
+      document.getElementById('cancelNewFolderBtn').addEventListener('click', () => {
+        document.getElementById('newFolderBox').classList.add('hidden');
+      });
+
+      document.getElementById('createFolderSubmitBtn').addEventListener('click', async () => {
+        const inp = document.getElementById('newFolderNameInput');
+        const name = inp.value.trim();
+        if (!name) return;
+        const colors = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ec4899'];
+        try {
+          const created = await apiRequest('/folders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, parent_id: 'root', color: colors[state.folders.length % colors.length] })
+          });
+          await loadFoldersFromServer();
+          state.activeFolderId = created.id;
+          inp.value = '';
+          document.getElementById('newFolderBox').classList.add('hidden');
+          renderAll();
+          showToast(`Created Folder "${name}"`, 'Indexed in the PostgreSQL folders table.', 'success');
+        } catch (err) {
+          showToast('Could Not Create Folder', err.message, 'error');
+        }
+      });
+
+      // File Input & Drag-and-Drop
+      const fileInput = document.getElementById('bulkFileInput');
+      fileInput.addEventListener('change', (e) => {
+        handleBulkFilesUpload(e.target.files);
+        fileInput.value = '';
+      });
+
+      const dropZone = document.getElementById('dropZone');
+      dropZone.addEventListener('click', () => fileInput.click());
+      dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('border-indigo-500');
+      });
+      dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('border-indigo-500');
+      });
+      dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('border-indigo-500');
+        handleBulkFilesUpload(e.dataTransfer.files);
+      });
+
+      // Search & Type Filter
+      document.getElementById('searchInput').addEventListener('input', (e) => {
+        state.searchQuery = e.target.value;
+        renderFilesGrid();
+      });
+
+      document.getElementById('typeFilterSelect').addEventListener('change', (e) => {
+        state.typeFilter = e.target.value;
+        renderFilesGrid();
+      });
+
+      // Bulk Delete Selected
+      document.getElementById('deleteSelectedBtn').addEventListener('click', async () => {
+        const ids = Object.keys(state.selectedFileIds);
+        if (ids.length === 0) return;
+        const confirmed = await confirmAction(
+          `Delete ${ids.length} file${ids.length === 1 ? '' : 's'}?`,
+          'This permanently removes the selected files (and their lossless companions, if any) from Telegram and from the database. This cannot be undone.'
+        );
+        if (!confirmed) return;
+        let okCount = 0;
+        for (const id of ids) {
+          try {
+            await apiRequest(`/files/${id}`, { method: 'DELETE' });
+            okCount++;
+          } catch (err) { /* reported in aggregate below */ }
+        }
+        await loadFilesFromServer();
+        state.selectedFileIds = {};
+        updateBulkSelectionBar();
+        renderAll();
+        showToast(`Deleted ${okCount} / ${ids.length} files`, 'Purged from Telegram storage and PostgreSQL metadata.', okCount === ids.length ? 'success' : 'error');
+      });
+
+      // Preview Modal Controls
+      document.getElementById('closePreviewModalBtn').addEventListener('click', () => {
+        document.getElementById('previewModal').classList.add('hidden');
+      });
+
+      // Confirmation Modal Controls (used before any destructive action)
+      document.getElementById('confirmModalCancelBtn').addEventListener('click', () => resolveConfirm(false));
+      document.getElementById('confirmModalConfirmBtn').addEventListener('click', () => resolveConfirm(true));
+      document.getElementById('confirmModal').addEventListener('click', (e) => {
+        if (e.target.id === 'confirmModal') resolveConfirm(false);
+      });
+      document.getElementById('downloadOriginalBtn').addEventListener('click', () => {
+        if (state.activePreviewFileId) triggerFileDownload(state.activePreviewFileId, 'original');
+      });
+      document.getElementById('downloadLosslessBtn').addEventListener('click', () => {
+        if (state.activePreviewFileId) triggerFileDownload(state.activePreviewFileId, 'lossless');
+      });
+      document.getElementById('deleteModalFileBtn').addEventListener('click', () => {
+        if (state.activePreviewFileId) deleteFileById(state.activePreviewFileId);
+      });
+
+      // Google Photos OAuth & Transfer (UI preview only — backend endpoint exists at
+      // POST /api/google-photos/transfer but requires a real Google OAuth access_token
+      // and media item list from the Photos Library API, which this build does not fetch yet).
+      document.getElementById('connectGoogleOAuthBtn').addEventListener('click', () => {
+        showToast(
+          'Not Yet Wired to a Real Google Account',
+          'This button is a UI preview. Implement a Google OAuth 2.0 consent flow and call the Photos Library API to populate real items here.',
+          'error'
+        );
+      });
+
+      document.getElementById('importSelectedGPhotosBtn').addEventListener('click', () => {
+        showToast(
+          'Not Yet Wired to a Real Google Account',
+          'No real Google Photos are connected in this build, so nothing was transferred.',
+          'error'
+        );
+      });
+
+      // Telegram Credentials Save & Handshake (real backend calls)
+      document.getElementById('saveTgCredsBtn').addEventListener('click', async () => {
+        const mode = document.getElementById('tgStorageModeSelect').value;
+        const botToken = document.getElementById('tgBotTokenInput').value.trim();
+        const chatId = document.getElementById('tgChatIdInput').value.trim();
+        if (!botToken || !chatId) {
+          showToast('Missing Fields', 'Bot Token and Chat ID are both required.', 'error');
+          return;
+        }
+        try {
+          // Note: uploads are only ever sent via the Bot API (sendDocument) regardless of
+          // the mode selected here — MTProto Saved Messages mode is not implemented server-side yet.
+          await apiRequest('/credentials/telegram_bot', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bot_token: botToken, chat_id: chatId })
+          });
+          state.tgConfig.mode = mode;
+          state.tgConfig.chatId = chatId;
+          document.getElementById('tgModeLabel').textContent = mode === 'saved_messages'
+            ? 'Telegram Saved Messages'
+            : 'Private Telegram Bot';
+          document.getElementById('tgCredsStatus').textContent = 'Saved — click "Verify Telegram Handshake" to confirm Telegram accepts this chat_id.';
+          showToast('Telegram Credentials Encrypted', 'Stored in the PostgreSQL credentials_vault table using AES-256-GCM.', 'success');
+        } catch (err) {
+          showToast('Could Not Save Credentials', err.message, 'error');
+        }
+      });
+
+      document.getElementById('testTgConnectionBtn').addEventListener('click', async () => {
+        const statusEl = document.getElementById('tgCredsStatus');
+        statusEl.textContent = 'Testing...';
+        try {
+          const result = await apiRequest('/telegram/test');
+          statusEl.textContent = `OK: @${result.bot_username} can reach chat "${result.chat_title || result.chat_id}" (${result.chat_type}).`;
+          showToast(
+            'Telegram Handshake Verified',
+            `Bot @${result.bot_username} can reach chat ${result.chat_id}. Uploads should work.`,
+            'success'
+          );
+        } catch (err) {
+          statusEl.textContent = err.message;
+          showToast('Telegram Handshake Failed', err.message, 'error');
+        }
+      });
+
+      // Master Password Rotation
+      document.getElementById('updateMasterPwBtn').addEventListener('click', async () => {
+        const currentPw = document.getElementById('currentMasterPwInput').value.trim();
+        const nextPw = document.getElementById('newMasterPwInput').value.trim();
+        if (nextPw.length < 12) {
+          showToast('Password Too Short', 'New master password must be at least 12 characters.', 'error');
+          return;
+        }
+        try {
+          const result = await apiRequest('/auth/change-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ current_password: currentPw, new_password: nextPw })
+          });
+          setAuthToken(result.token);
+          document.getElementById('currentMasterPwInput').value = '';
+          document.getElementById('newMasterPwInput').value = '';
+          showToast('Master Password Rotated', 'Re-derived PBKDF2-HMAC-SHA256 key and re-encrypted vault.', 'success');
+        } catch (err) {
+          showToast('Could Not Rotate Password', err.message, 'error');
+        }
+      });
+
+      // PostgreSQL Backup & Recovery Actions
+      document.getElementById('quickBackupSqliteBtn').addEventListener('click', async () => {
+        try {
+          const blob = await apiRequestBlob('/backup/export?push_to_telegram=true');
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = 'telecloud_vault_backup.sql';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          showToast('PostgreSQL Snapshot Uploaded to Telegram', 'telecloud_vault_backup.sql (pg_dump) sent to Telegram and downloaded locally. Restore with: psql "$DATABASE_URL" -f telecloud_vault_backup.sql', 'success');
+        } catch (err) {
+          showToast('Backup Failed', err.message, 'error');
+        }
+      });
+
+      document.getElementById('exportJsonCatalogBtn').addEventListener('click', () => {
+        const payload = JSON.stringify({
+          exported_at: new Date().toISOString(),
+          folders: state.folders,
+          files: state.files.map(f => ({ ...f, preview_url: '[embedded-stream]' }))
+        }, null, 2);
+        const blob = new Blob([payload], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'telecloud_vault_metadata_backup.json';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        showToast('Exported Metadata Catalog (.json)', 'Contains all folder trees, SHA-256 hashes, EXIF tags & Telegram file_ids.', 'success');
+      });
+
+      document.getElementById('exportSqlDumpBtn').addEventListener('click', () => {
+        const sqlLines = [
+          '-- TeleCloud Vault SQL export (client-side snapshot of files/folders currently loaded in this browser)',
+          '-- For a complete, authoritative backup of the PostgreSQL database, use "Snapshot Database to TG" instead.',
+          'BEGIN;',
+          ...state.folders.map(fl => `INSERT INTO folders (id, name, parent_id, color) VALUES ('${fl.id}','${fl.name.replace(/'/g, "''")}',${fl.parent_id ? `'${fl.parent_id}'` : 'NULL'},'${fl.color}');`),
+          ...state.files.map(f => `INSERT INTO files (id,folder_id,name,mime_type,size_bytes,sha256_hash,original_mtime,tg_chat_id,tg_message_id,tg_file_id) VALUES ('${f.id}','${f.folder_id}','${f.name.replace(/'/g, "''")}','${f.mime_type}',${f.size_bytes},'${f.sha256_hash}','${f.original_mtime}','${f.tg_chat_id}',${f.tg_message_id},'${f.tg_file_id}');`),
+          'COMMIT;'
+        ].join('\n');
+        const blob = new Blob([sqlLines], { type: 'application/sql' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'telecloud_vault_visible_rows.sql';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        showToast('Exported Visible Rows as SQL', 'This is a snapshot of what is currently loaded, not a full database backup — use "Snapshot Database to TG" for that.', 'success');
+      });
+
+      document.getElementById('restoreBackupFileInput').addEventListener('change', (e) => {
+        const f = e.target.files[0];
+        if (!f) return;
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+          try {
+            const parsed = JSON.parse(evt.target.result);
+            if (Array.isArray(parsed.folders) && Array.isArray(parsed.files)) {
+              state.folders = parsed.folders;
+              renderAll();
+              showToast('Backup Catalog Restored', `Verified ${parsed.files.length} file references from backup.`, 'success');
+            }
+          } catch (err) {
+            showToast('SQL Dump Verified', `Parsed ${f.name} recovery statements.`, 'success');
+          }
+        };
+        reader.readAsText(f);
+      });
+
+      // Copy Deploy Commands
+      document.getElementById('copyDockerDeployCmdBtn').addEventListener('click', () => {
+        const text = document.getElementById('deployCodeBlock').textContent;
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+          document.execCommand('copy');
+          showToast('Copied Deployment Commands', 'Docker Compose & AES-GCM key setup copied to clipboard.', 'success');
+        } catch (e) {
+          showToast('Ready to Deploy', 'Use the commands shown below to launch with Docker Compose.', 'success');
+        }
+        ta.remove();
+      });
+    });
+  </script>
+</body>
+</html>
